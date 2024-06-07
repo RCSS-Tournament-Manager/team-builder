@@ -7,6 +7,10 @@ name = "pypi"
 python-dotenv = "*"
 docker = "*"
 fastapi = "*"
+aiohttp = "*"
+aio-pika = "*"
+aiormq = "*"
+colorlog = "*"
 
 [dev-packages]
 

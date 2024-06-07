@@ -20,6 +20,11 @@ pipenv install
 pipenv run python -m uvicorn builder-service:app --reload
 ```
 
+# TODO
+
+- [ ] change the messages 
+- [ ] change dockerfile
+
 
 ## License
 This project is licensed under the AGPL-3.0 License - see the [LICENSE](LICENSE) file for details.

@@ -9,34 +9,33 @@ networks:
 
 services:
 
-  # builder:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile
-  #   container_name: b_builder
-  #   volumes:
-  #     - /var/run/docker.sock:/var/run/docker.sock
-  #   environment:
-  #     - DOCKER_HOST=unix:///var/run/docker.sock
-  #     - DOCKER_DRIVER=overlay2
-  #   ports:
-  #     - 8001:8001
-  #   networks:
-  #     buildernet:
-  #       ipv4_address: 10.2.0.1
-
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    hostname: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      dev_network:
+        ipv4_address: 10.20.0.2
+    environment:
+      RABBITMQ_DEFAULT_USER: test
+      RABBITMQ_DEFAULT_PASS: test
+  
   registry:
     image: registry:2
-    container_name: b_registry
+    container_name: registry
+    hostname: registry
+    ports:
+      - "5000:5000"
+    networks:
+      dev_network:
+        ipv4_address: 10.20.0.3
+    environment:
+      REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY: /var/lib/registry
     volumes:
       - ./data/registry:/var/lib/registry
-    environment:
-      - REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY=/var/lib/registry
-      - REGISTRY_HTTP_ADDR=0.0.0.0:5000
-    ports:
-      - 5000:5000
-    networks:
-      buildernet:
-        ipv4_address: 10.2.0.2
+
 
 
