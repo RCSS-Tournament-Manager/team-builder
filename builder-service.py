@@ -1,43 +1,140 @@
-import logging
+import asyncio
+import aio_pika
+
 from src.docker import Docker
-from src import env
-from fastapi import FastAPI
-import uvicorn
-from src.routes import builder
-from src.logger import init_logger
-init_logger()
+from src.logger import get_logger
+from src.message_handlers.kill_build import kill_build_command_handler
+from src.message_handlers.ping import ping_command_handler
+from src.message_handlers.build import build_command_handler
+from src.message_handlers.status import status_command_handler
+from src.message_handler import MessageHandler
+from src.rabbitmq import RabbitMQ
+from src.routes.status import handle_status
+from src.storage import MinioClient
+from src.webserver import Webserver
 
 
-logger = logging.getLogger("runner")
-
-# --- Global Instances
-
-app = FastAPI(
-    title="Image Builder Service",
-    version="0.1.0"
-)
-
-app.include_router(builder.router)
 
 
-@app.get("/health-check")
-def get_item():
-    return {"status": "OK"}
+logger = get_logger(__name__)
+
+
+loop = asyncio.get_event_loop()
+tasks = {}
+match_task = None
+
+
+        
+async def main(loop):
+
+
+    # ---------------------- 
+    # RabbitMQ
+    # TODO server should change
+    # ---------------------- 
+    rabbit = RabbitMQ(
+        loop=loop, 
+        server="amqp://test:test@localhost/", 
+        queue="build_queue"
+    )
+    logger.info("rabbitmq consumer started")
+    try:
+        logger.info("rabbitmq connecting...")
+        await rabbit.connect()
+        logger.info("rabbitmq connected")
+    except Exception as e:
+        logger.error("rabbitmq connection failed")
+        logger.error(e)
+        exit(1)
+
+    
+    
+    # ----------------------
+    # Storage
+    # ----------------------
+    storage = MinioClient(
+        endpoint="localhost:9000",
+        access_key="minioadmin",
+        secret_key="minioadmin",
+        secure=False
+    )
+    try:
+        logger.info("storage connecting...")
+        storage.connect()
+        logger.info("storage connected")
+    except Exception as e:
+        logger.error("storage connection failed")
+        logger.error(e)
+        exit(1)
+        
+        
+    # ----------------------
+    # Docker
+    # ----------------------
+    docker = Docker(
+        default_registry="localhost:5000",
+        username="",
+        password=""
+    )
+    try:
+        logger.info("docker connecting...")
+        docker.connect()
+        logger.info("docker connected")
+    except Exception as e:
+        logger.error("docker connection failed")
+        logger.error(e)
+        exit(1)
+    
+    
+    # ----------------------
+    # Webserver
+    # ----------------------
+    server = Webserver(
+        host="localhost",
+        port=8080
+    )
+    
+    # --- routes
+    server.add_get('/status', handle_status)
+    try:
+        await server.listen()
+        logger.info("webserver connected")
+    except Exception as e:
+        logger.error("webserver connection failed")
+        logger.error(e)
+        exit(1)
+    
+
+
+
+
+    # ----------------------
+    
+    # --- add message handler
+    mh = MessageHandler(
+        rabbit=rabbit,
+        storage=storage,
+        docker=docker,
+        server=server
+    )
+    
+    mh.add_command_handler("build", build_command_handler)
+    mh.add_command_handler("kill_build" , kill_build_command_handler)
+    mh.add_command_handler("ping", ping_command_handler)
+    mh.add_command_handler("status", status_command_handler)
+
+
+    
+    await rabbit.add_message_handler(mh.message_processor)
+
 
 
 if __name__ == "__main__":
     try:
-        env.docker_i = Docker(
-            default_registry=env.DOCKER_REGISTRY
-        )
-        logger.info("Docker connected")
-    except Exception as e:
-        logger.error("Docker connection failed")
-        logger.error(e)
-        exit(1)
-    
-    uvicorn.run(
-        app,
-        host=env.HOST,
-        port=env.PORT
-    )
+        loop.run_until_complete(main(loop))
+        loop.run_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        loop.run_until_complete(loop.shutdown_asyncgens())
+        loop.close()

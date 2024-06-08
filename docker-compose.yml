@@ -1,14 +1,5 @@
-version: '3.7'
-
-networks:
-  buildernet:
-    ipam:
-      driver: default
-      config:
-        - subnet: 10.2.0.0/24
-
 services:
-
+  
   rabbitmq:
     image: rabbitmq:3-management
     container_name: rabbitmq
@@ -22,7 +13,7 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: test
       RABBITMQ_DEFAULT_PASS: test
-  
+
   registry:
     image: registry:2
     container_name: registry
@@ -37,5 +28,26 @@ services:
     volumes:
       - ./data/registry:/var/lib/registry
 
+  minio:
+    image: minio/minio
+    container_name: minio
+    hostname: minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    networks:
+      dev_network:
+        ipv4_address: 10.20.0.4
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - ./data/minio:/data
 
-
+networks:
+  dev_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.20.0.0/16

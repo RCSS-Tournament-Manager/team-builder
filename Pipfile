@@ -4,15 +4,17 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
+asyncio = "*"
 python-dotenv = "*"
 docker = "*"
-fastapi = "*"
 aiohttp = "*"
 aio-pika = "*"
 aiormq = "*"
 colorlog = "*"
+minio = "*"
+pika = "*"
 
 [dev-packages]
 
 [requires]
-python_version = "3.12"
+python_version = "3.10"

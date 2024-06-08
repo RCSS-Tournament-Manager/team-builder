@@ -8,10 +8,8 @@ import uuid
 from fastapi.responses import StreamingResponse
 import urllib3
 from src import env
-
-
 from src.models import ImageBuildedResponse
-
+from src.rabbitmq import RabbitMQ
 logger = logging.getLogger("builder")
 
 router = APIRouter(
@@ -131,6 +129,11 @@ async def build_image_with_file(
 async def build_image_with_s3(
         file_id: str,
 ):
+    
+    #Create RabbitMQ
+    rabbit = RabbitMQ()
+    rabbit.connect()
+
     s3_client = env.s3_client
     bucket_name = env.s3_bucket_name
     file_key = f"{file_id}.tar.gz"
