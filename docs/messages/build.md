@@ -5,25 +5,25 @@ message format :
     "command": "build",
     "body": {
         "build_id": "1234",
+        "team_name": "teamA",
         "image_name": "teamA",
         "image_tag": "latest",
 
 
-        "dockerfile: {
-            "type": "minio",
-            "config": {
+        "team_dockerfile": {
+            "_type": "minio",
+            "_config": {
                 "endpoint": "http://minio:9000",
                 "access_key": "access_key",
                 "secret_key": "secret_key",
             },
             "bucket": "bucket",
             "file_id": "1234"
-        }, // if there is no dockerfile we use fallback
-
+        }, 
 
         "file":{
-            "type": "minio",
-            "config": {
+            "_type": "minio",
+            "_config": {
                 "endpoint": "http://minio:9000",
                 "access_key": "access_key",
                 "secret_key": "secret_key",
@@ -31,31 +31,33 @@ message format :
             "bucket": "bucket",
             "file_id": "1234"
         },
+
         "registry":{
-            "config": {
+            "_type": "docker",
+            "_config": {
                 "host": "",
                 "port": 1234,
                 "username": "username",
                 "password": "password",
             }  
-
         },
+
         "log": {
             "level": "info",
             "stream": {
                 "build": {
-                    "type": "rabbitmq",
-                    "host": "rabbitmq",
-                    "port": 5672,
-                    "username": "username",
-                    "password": "password",
-                    "exchange": "exchange",
+                    "_type": "rabbitmq",
+                    "_config": {
+                        "host": "rabbitmq",
+                        "port": 5672,
+                        "username": "username",
+                        "password": "password",
+                                            
+                    },
                     "queue": "queue",                    
                 },
             }
         }
-        
-        
         
     }
 }

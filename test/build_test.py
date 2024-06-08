@@ -1,46 +1,35 @@
 import asyncio
 import aio_pika
 import json
+import os
+from src.storage import MinioClient
+from src.logger import get_logger
+logger = get_logger(__name__)
+
+
+bucket = "test"
+file_id = "cyrus2d"
+
 
 def data():
    return {
         "command":"build",
         "data":{
             "build_id": "1234",
+            "team_name": "cyrus2d",
             "image_name": "cyrus2d",
             "image_tag": "latest",
-            "file": {
-                "type": "minio",
-                "config": {
-                    "endpoint": "http://localhost:9000",
-                    "access_key": "minioadmin",
-                    "secret_key": "minioadmin",
-                },
-                "bucket": "test",
-                "file_id": "1234"
+            
+
+            "file":{
+                "_type": "minio",
+                "bucket": bucket,
+                "file_id": file_id
             },
-            "registry": {
-                "config": {
-                    "host": "",
-                    "port": 1234,
-                    "username": "registry",
-                    "password": "registry"
-                }
+
+            "registry":{
+                "_type": "docker",
             },
-            "log": {
-                "level": "info",
-                "stream": {
-                    "build": {
-                        "type": "rabbitmq",
-                        "host": "rabbitmq",
-                        "port": 5672,
-                        "username": "username",
-                        "password": "password",
-                        "exchange": "exchange",
-                        "queue": "queue"
-                    }
-                }
-            }
         }
 
     }
@@ -48,6 +37,26 @@ def data():
 def log(msg):
     print (f' [+] {msg}')
 
+
+async def upload_file():
+    minio = MinioClient(
+        endpoint="localhost:9000",
+        access_key="minioadmin",
+        secret_key="minioadmin",
+        secure=False
+    )
+    
+    file_path = os.path.join(
+        os.path.dirname(__file__),
+        "cyrus2d.tar.gz"
+    )
+    
+    await minio.upload_file(
+        bucket_name=bucket,
+        object_name=file_id,
+        file_path=file_path
+    )
+    pass
 
 
 async def send_run_message(channel,send_queue):
@@ -76,7 +85,9 @@ async def send_run_message(channel,send_queue):
                 if "killed" in message.body.decode():
                     break
 
-async def run():
+async def run(): 
+    await upload_file()
+    
     connection = await aio_pika.connect_robust("amqp://test:test@localhost/")
     loop  = asyncio.get_event_loop()
     async with connection:
