@@ -36,3 +36,6 @@ class MinioClient:
         if not self.client.bucket_exists(bucket_name):
             self.client.make_bucket(bucket_name)
         self.client.fput_object(bucket_name, object_name, file_path)
+        
+    async def has_object(self, bucket_name, object_name):
+        return self.client.bucket_exists(bucket_name) and self.client.object_exists(bucket_name, object_name)

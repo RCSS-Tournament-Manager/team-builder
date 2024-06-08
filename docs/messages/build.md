@@ -8,6 +8,19 @@ message format :
         "image_name": "teamA",
         "image_tag": "latest",
 
+
+        "dockerfile: {
+            "type": "minio",
+            "config": {
+                "endpoint": "http://minio:9000",
+                "access_key": "access_key",
+                "secret_key": "secret_key",
+            },
+            "bucket": "bucket",
+            "file_id": "1234"
+        }, // if there is no dockerfile we use fallback
+
+
         "file":{
             "type": "minio",
             "config": {
