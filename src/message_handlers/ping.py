@@ -7,5 +7,4 @@ logger = get_logger(__name__)
 
 async def ping_command_handler(data: dict, reply, **kwargs):
     logger.info("Handling ping command")
-    if reply != None:
-        await reply("pong")
+    await reply("pong")

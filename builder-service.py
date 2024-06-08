@@ -13,18 +13,10 @@ from src.routes.status import handle_status
 from src.storage import MinioClient
 from src.webserver import Webserver
 
-
-
-
 logger = get_logger(__name__)
 
-
 loop = asyncio.get_event_loop()
-tasks = {}
-match_task = None
 
-
-        
 async def main(loop):
 
 
