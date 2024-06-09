@@ -9,7 +9,7 @@ services:
       - "15672:15672"
     networks:
       dev_network:
-        ipv4_address: 10.20.0.2
+        ipv4_address: 10.200.0.2
     environment:
       RABBITMQ_DEFAULT_USER: test
       RABBITMQ_DEFAULT_PASS: test
@@ -22,7 +22,7 @@ services:
       - "5000:5000"
     networks:
       dev_network:
-        ipv4_address: 10.20.0.3
+        ipv4_address: 10.200.0.3
     environment:
       REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY: /var/lib/registry
     volumes:
@@ -37,7 +37,7 @@ services:
       - "9001:9001"
     networks:
       dev_network:
-        ipv4_address: 10.20.0.4
+        ipv4_address: 10.200.0.4
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
@@ -50,4 +50,4 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 10.20.0.0/16
+        - subnet: 10.200.0.0/16

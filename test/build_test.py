@@ -4,6 +4,8 @@ import json
 import os
 from src.storage import MinioClient
 from src.logger import get_logger
+
+import random
 logger = get_logger(__name__)
 
 
@@ -15,7 +17,7 @@ def data():
    return {
         "command":"build",
         "data":{
-            "build_id": "1234",
+            "build_id": random.randint(1000,9000),
             "team_name": "cyrus2d",
             "image_name": "cyrus2d",
             "image_tag": "latest",
@@ -53,9 +55,10 @@ async def upload_file():
     
     await minio.upload_file(
         bucket_name=bucket,
-        object_name=file_id,
+        object_name=f'{file_id}.tar.gz',
         file_path=file_path
     )
+    log(f"Uploaded file {file_id} to {bucket}")
     pass
 
 

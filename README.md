@@ -15,9 +15,15 @@ Team builder service is a service that download a team binary from a s3 bucket a
 ```bash
 pipenv install
 ```
+
 1. Run the service
 ```bash
-pipenv run python -m uvicorn builder-service:app --reload
+docker-compose up -d 
+```
+
+1. Run the service
+```bash
+pipenv run python builder-service.py
 ```
 
 # TODO

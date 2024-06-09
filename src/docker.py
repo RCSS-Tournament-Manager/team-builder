@@ -85,4 +85,4 @@ class Docker:
             stream=True
         )
         for line in push_progress:
-            yield line
+            yield line.decode('utf-8')

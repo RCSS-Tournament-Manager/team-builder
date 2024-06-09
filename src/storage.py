@@ -49,7 +49,7 @@ class MinioClient:
         if not self.client:
             self.connect()
             
-        return self.client.bucket_exists(bucket_name) and self.client.object_exists(bucket_name, object_name)
+        return self.client.bucket_exists(bucket_name) and self.client.stat_object(bucket_name, object_name)
     
     async def download_file(
         self, 
