@@ -140,6 +140,8 @@ async def build_command_handler(
             file_name, 
             tmp_file
         )
+        logger.info(f"Team File Download Successful { tmp_file }")
+
     except Exception as e:
         logger.error("Failed to download file from S3", e)
         await reply("Failed to download file from S3")
@@ -149,6 +151,8 @@ async def build_command_handler(
     try:
         with tarfile.open(tmp_file) as tar:
             tar.extractall(path=tmp_folder)
+        logger.info(f"Tar file extracted successfully to {tmp_folder}")
+
     except Exception as e:
         logger.error("Failed to extract tar file", e)
         await reply(f"Failed to extract tar file")
@@ -159,6 +163,7 @@ async def build_command_handler(
         for name in os.listdir(tmp_folder)
         if os.path.isdir(os.path.join(tmp_folder, name))
     ]
+    logger.info(f"Sub folders in the extracted folder: {sub_folders}")
     if len(sub_folders) != 1:
         logger.error("There should be only one folder in the extracted folder")
         await reply("There should be only one folder in the extracted folder")
@@ -169,8 +174,8 @@ async def build_command_handler(
     extracted_folder_name = sub_folders[0]
 
     if extracted_folder_name != team_name:
-        logger.error("Teamname and extracted folder name do not match")
-        await reply("Teamname and extracted folder name do not match")
+        logger.error(f"Teamname and extracted folder {extracted_folder_name} name do not match")
+        await reply(f"Teamname and extracted folder {extracted_folder_name} name do not match")
         return
    
     # Check if the required files exist in the extracted folder
@@ -184,7 +189,9 @@ async def build_command_handler(
         logger.error(f"Required files not found: {not_found_files}")
         await reply(f"Required files not found: {not_found_files}")
         return
-
+    elif len(not_found_files) == 0:
+        logger.info("All required teamfiles found")
+        await reply("All required teamfiles found")
     # Check if any Dockerfile type exists in the extracted folder
     dockerfile_types = [
         "Dockerfile",
@@ -203,32 +210,39 @@ async def build_command_handler(
                 logger.error(f"Failed to remove {dockerfile_path}")
                 await reply(f"Failed to remove {dockerfile_type}")
                 return
+            
 
 
     # Copy the dockerfile from s3 to the extracted folder or falback
     try:
         new_dockerfile_path = os.path.join(
             extracted_folder_path,
-            team_name,
+            # team_name,
             "Dockerfile"
         )
         shutil.copy(
             team_dockerfile_path, 
             new_dockerfile_path
         )  # TODO: CHECK THIS
-        logger.info(
-            f"new_dockerfile_path has been copied in to the extracted folder"
-        )
-        await reply(f"new_dockerfile_path has been copied in to the extracted folder")
-    except:
-        logger.info(
-            f"Failed to copy new_dockerfile_path in the extracted folder"
-        )
-        await reply(
-            f"Failed to copy new_dockerfile_path in the extracted folder"
-        )
-        return
-
+        logger.info(f"S3 Dockerfile has been copied in to the extracted folder")
+        await reply(f"S3 Dockerfile has been copied in to the extracted folder")
+    except Exception as e:
+        logger.error(f"Failed to copy S3 Dockerfile in the extracted folder", e)
+        await reply(f"Failed to copy S3 Dockerfile in the extracted folder")
+        
+    # falback to default dockerfile and copy it to the extracted folder
+    if not os.path.exists(new_dockerfile_path):
+        try:
+            shutil.copy(
+                DEFAULT_TEAM_BUILD_DOCKERFILE, 
+                new_dockerfile_path
+            )
+            logger.info(f"Default Dockerfile has been copied in to the extracted folder")
+            await reply(f"Default Dockerfile has been copied in to the extracted folder")
+        except Exception as e:
+            logger.error(f"Failed to copy Default Dockerfile in the extracted folder", e)
+            await reply(f"Failed to copy Default Dockerfile in the extracted folder")
+            return
     # -----------------------------
     # Build the image
     try:
