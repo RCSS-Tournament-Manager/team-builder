@@ -210,7 +210,30 @@ async def build_command_handler(
                 logger.error(f"Failed to remove {dockerfile_path}")
                 await reply(f"Failed to remove {dockerfile_type}")
                 return
-            
+    
+    # create a bin folder in the extracted folder
+
+    bin_folder_path = os.path.join(extracted_folder_path, "bin")
+    try:
+        os.makedirs(bin_folder_path)
+    except:
+        logger.error(f"Failed to create bin folder in the extracted folder")
+        await reply(f"Failed to create bin folder in the extracted folder")
+        return
+    # move all of the extracted folder to 'bin' folder, if failed replay the error
+    for file_name in os.listdir(extracted_folder_path):
+        file_path = os.path.join(extracted_folder_path, file_name)
+        if os.path.isfile(file_path):
+            try:
+                shutil.move(file_path, bin_folder_path)
+            except Exception as e:
+                logger.error(f"Failed to move file {file_name} to bin folder", e)
+                await reply(f"Failed to move file {file_name} to bin folder")
+                return
+    # replay the success message
+    logger.info(f"Extracted folder has been moved to the bin folder")
+    await reply(f"Extracted folder has been moved to the bin folder")
+
 
 
     # Copy the dockerfile from s3 to the extracted folder or falback
@@ -276,9 +299,15 @@ async def build_command_handler(
         shutil.rmtree(tmp_folder)
         await reply("Failed to push image to registry")
         return
+    # remove the extracted folder after the image has been pushed
+    try:
+        shutil.rmtree(extracted_folder_path)
+    except Exception as e:
+        logger.error("Failed to remove the extracted folder", e)
+        await reply("Failed to remove the extracted folder")
+        return
 
-    # Clean up
-    shutil.rmtree(tmp_folder)
-    os.remove(tmp_file)
-    await reply({"image_name": image_name, "image_tag": image_tag})
+    # replay the success message with the image name and tag
+    logger.info(f"Image {image_name}:{image_tag} has been built and pushed successfully")
+    await reply(f"Image {image_name}:{image_tag} has been built and pushed successfully")
     return
