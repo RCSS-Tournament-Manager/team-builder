@@ -16,7 +16,10 @@ Team builder service is a service that download a team binary from a s3 bucket a
 pipenv install
 ```
 
-2.Create an env variable file like env.example
+2.Create an env variable file from env.example
+```bash
+cp .env.example .env
+```
 
 3. Run the service
 ```bash
