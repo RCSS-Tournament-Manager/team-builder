@@ -38,6 +38,13 @@ class MinioClient:
         object_name, 
         file_path
     ):
+        """Upload an file to the minio storage
+
+        Args:
+            bucket_name (str): name of the minio bucket you want to store your file
+            object_name (str): name of the file
+            file_path (str): os path of the file you want to upload
+        """
         if not self.client:
             self.connect()
             
@@ -57,6 +64,13 @@ class MinioClient:
         object_name, 
         file_path
     ):
+        """Download an file to the minio storage
+
+        Args:
+            bucket_name (str): name of the minio bucket you want to download your file
+            object_name (str): name of the file
+            file_path (str): os path of the downloaded file you want to store
+        """
         if not self.client:
             self.connect()
         self.client.fget_object(bucket_name, object_name, file_path)

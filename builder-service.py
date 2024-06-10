@@ -12,7 +12,7 @@ from src.rabbitmq import RabbitMQ
 from src.routes.status import handle_status
 from src.storage import MinioClient
 from src.webserver import Webserver
-
+from src import env
 logger = get_logger(__name__)
 
 loop = asyncio.get_event_loop()
@@ -23,11 +23,10 @@ async def main(loop):
 
     # ---------------------- 
     # RabbitMQ
-    # TODO server should change
     # ---------------------- 
     rabbit = RabbitMQ(
         loop=loop, 
-        server="amqp://test:test@localhost/", 
+        server="amqp://"+env.RABBITMQ_USERNAME+":"+env.RABBITMQ_PASSWORD+"@"+env.RABBITMQ_ADDRESS+"/", 
         queue="build_queue"
     )
     logger.info("rabbitmq consumer started")
@@ -46,9 +45,9 @@ async def main(loop):
     # Storage
     # ----------------------
     storage = MinioClient(
-        endpoint="localhost:9000",
-        access_key="minioadmin",
-        secret_key="minioadmin",
+        endpoint=env.MINIO_ADDRESS+ ":" + str(env.MINIO_PORT),
+        access_key=env.MINIO_USERNAME,
+        secret_key=env.MINIO_PASSWORD,
         secure=False
     )
     try:
@@ -65,9 +64,9 @@ async def main(loop):
     # Docker
     # ----------------------
     docker = Docker(
-        default_registry="localhost:5000",
-        username="",
-        password=""
+        default_registry=env.DOCKER_REGISTERY_ADDRESS+ ":" + str(env.DOCKER_REGISTERY_PORT),
+        username=env.DOCKER_REGISTERY_USERNAME,
+        password=env.DOCKER_REGISTERY_PASSWORD
     )
     try:
         logger.info("docker connecting...")
@@ -83,8 +82,8 @@ async def main(loop):
     # Webserver
     # ----------------------
     server = Webserver(
-        host="localhost",
-        port=8080
+        host=env.WEBSERVER_ADDRESS,
+        port=env.WEBSERVER_PORT
     )
     
     # --- routes

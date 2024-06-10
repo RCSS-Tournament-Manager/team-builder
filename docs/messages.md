@@ -14,8 +14,5 @@ All messages are sent in JSON format. The message format is as follows:
 
 
 List of available messages:
-1. [Run Match](messages/run_match.md)
-1. [kill Match](messages/stop_match.md)
-1. [ping](messages/ping.md)
-1. [status](messages/status.md)
-1. [score](messages/score.md)
+1. [Build team](messages/build.md)
+2. [Kill build](messages/KillBuild.md)

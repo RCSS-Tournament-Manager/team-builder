@@ -23,9 +23,10 @@ class Docker:
         self.api = docker.APIClient(base_url='unix://var/run/docker.sock')
         
     def connect(self):
+        """connect to docker
+        """
         self.client.ping()
         
-        # try to login to the default registry
         self.client.login(
             username=self.username,
             password=self.password,

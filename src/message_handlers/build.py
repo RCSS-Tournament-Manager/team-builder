@@ -14,8 +14,9 @@ from src.env import (
     REMOVE_AFTER_BUILD,
     USE_TMP_UPLOAD_FOLDER,
 )
-
+from src.message_handlers.kill_build import (check_kill_command,set_kill_command)
 import json
+import asyncio
 
 logger = logging.getLogger("builder")
 
@@ -66,7 +67,7 @@ async def build_command_handler(
     if "registry" not in data:
         data["registry"] = {"_type": "docker", "_config": "default"}
 
-    d, errors = initialize_clients(data, docker=docker, storage=storage, **kwargs)
+    extracted_data, errors = initialize_clients(data, docker=docker, storage=storage, **kwargs)
     for error in errors:
         logger.error(error)
         await reply(error)
@@ -78,23 +79,23 @@ async def build_command_handler(
     else:
         # create a folder with the build_id and teamname
         tmp_folder = os.path.join(DEFAULT_UPLOAD_FOLDER, f"{build_id}_{team_name}")
-        log_reply(f"Using pre-defined folder: {tmp_folder}")
+        await log_reply(f"Using pre-defined folder: {tmp_folder}")
         os.makedirs(tmp_folder, exist_ok=True)
         tmp_file = os.path.join(tmp_folder, file_name)
 
     team_dockerfile_path = DEFAULT_TEAM_BUILD_DOCKERFILE
-    if "team_dockerfile" in d:
+    if "team_dockerfile" in extracted_data:
         if (
-            "bucket" not in d["team_dockerfile"]
-            or "file_id" not in d["team_dockerfile"]
+            "bucket" not in extracted_data["team_dockerfile"]
+            or "file_id" not in extracted_data["team_dockerfile"]
         ):
             await log_reply("Invalid team_dockerfile object", logger.error)
-            del d["dockerfile"]
+            del extracted_data["dockerfile"]
         else:
             file_path, errors = await download_team_dockerfile_from_minio(
-                bucket_name=d["team_dockerfile"]["bucket"],
-                object_name=d["team_dockerfile"]["file_id"],
-                client=d["team_dockerfile"]["_client"],
+                bucket_name=extracted_data["team_dockerfile"]["bucket"],
+                object_name=extracted_data["team_dockerfile"]["file_id"],
+                client=extracted_data["team_dockerfile"]["_client"],
             )
             for error in errors:
                 await log_reply(error, logger.error)
@@ -106,7 +107,7 @@ async def build_command_handler(
 
     # Check if the file exists in storage
     try:
-        if await d["file"]["_client"].has_object(
+        if await extracted_data["file"]["_client"].has_object(
             bucket_name=bucket, object_name=file_name
         ):
             logger.info("File found in S3")
@@ -135,8 +136,8 @@ async def build_command_handler(
 
     # Download the file to temp folder
     try:
-        await d["file"]["_client"].download_file(
-            d["file"]["bucket"], file_name, tmp_file
+        await extracted_data["file"]["_client"].download_file(
+            extracted_data["file"]["bucket"], file_name, tmp_file
         )
         logger.info(f"Team File Download Successful { tmp_file }")
 
@@ -178,7 +179,7 @@ async def build_command_handler(
         )
         return
 
-    # check the teamname and the extracted folder name is the same
+    # Check the teamname and the extracted folder name is the same
     team_folder_path = os.path.join(extracted_folder_path, sub_folders[0])
     extracted_folder_name = sub_folders[0]
 
@@ -238,15 +239,6 @@ async def build_command_handler(
     except Exception as e:
         await log_reply("Failed to rename the Team folder to bin", logger.error, e)
         return
-    
-    # # move the bin folder to the docker folder
-    # try:
-    #     logger.info(f"Moving {bin_folder_path} to {docker_folder_path}")
-    #     shutil.move(bin_folder_path, docker_folder_path)
-    #     await log_reply(f"Bin folder has been moved to the docker folder")
-    # except Exception as e:
-    #     await log_reply("Failed to move the bin folder to the docker folder", logger.error, e)
-    #     return
 
     # replay the success message
     await log_reply(f"Extracted folder has been moved to the bin folder")
@@ -258,7 +250,7 @@ async def build_command_handler(
             # team_name,
             "Dockerfile",
         )
-        shutil.copy(team_dockerfile_path, new_dockerfile_path)  # TODO: CHECK THIS
+        shutil.copy(team_dockerfile_path, new_dockerfile_path)  
 
         await log_reply(
             f"S3 Team Dockerfile has been copied in to the extracted folder"
@@ -284,9 +276,18 @@ async def build_command_handler(
             )
             return
     # -----------------------------
+    # Check if there was a kill build command
+    wait_time = 1
+    logger.info(f"Waiting {wait_time} second for any kill command")
+    await asyncio.sleep(wait_time)  
+    if await check_kill_command(team_name,build_id):
+        await set_kill_command()
+        logger.info(f"An kill build command was set for {team_name} --- Building has been stopped")
+        await log_reply(f"An kill build command was set for {team_name} --- Building has been stopped")
+        return
     # Build the image
     try:
-        build_result = d["registry"]["_client"].build_with_path(
+        build_result = extracted_data["registry"]["_client"].build_with_path(
             path=docker_folder_path,
             image_name=image_name,
             image_tag=image_tag,
@@ -312,7 +313,7 @@ async def build_command_handler(
 
     # Push the image to the registry
     try:
-        push_result = d["registry"]["_client"].push_to_registry(
+        push_result = extracted_data["registry"]["_client"].push_to_registry(
             image_name=image_name,
             image_tag=image_tag,
         )
