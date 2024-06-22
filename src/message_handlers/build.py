@@ -275,6 +275,12 @@ async def build_command_handler(
                 e,
             )
             return
+        
+    # change permission of start file executeable 
+    os.chmod(os.path.join(bin_folder_path, "start"), 0o755)
+    await log_reply(f"Start file has been made executable")
+    
+    
     # -----------------------------
     # Check if there was a kill build command
     wait_time = 1

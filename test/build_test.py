@@ -10,7 +10,7 @@ logger = get_logger(__name__)
 
 
 bucket = "test"
-file_id = "cyrus2d"
+file_id = "agent_r"
 
 
 def data():
@@ -18,8 +18,8 @@ def data():
         "command":"build",
         "data":{
             "build_id": random.randint(1000,9000),
-            "team_name": "cyrus2d",
-            "image_name": "cyrus2d",
+            "team_name": file_id,
+            "image_name": file_id,
             "image_tag": "latest",
             
 
@@ -50,7 +50,7 @@ async def upload_file():
     
     file_path = os.path.join(
         os.path.dirname(__file__),
-        "cyrus2d.tar.gz"
+        f'{file_id}.tar.gz'
     )
     
     await minio.upload_file(
