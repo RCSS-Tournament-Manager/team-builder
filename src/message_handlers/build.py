@@ -76,8 +76,10 @@ async def build_command_handler(
         },
     ]
 
-    global current_stage
-    current_stage = 0
+    current_stage = {
+        "i": 0
+    }
+    
     async def reply_stage(stage_id, message):
         await reply({"stage": stage_id, "data": message})
 
@@ -87,25 +89,30 @@ async def build_command_handler(
             current = stages.index(
                 next(filter(lambda x: x["id"] == stage_id, stages))
             )
-            print('==============',current)
-            global current_stage
-            current_stage = current + 1 if current < len(stages) - 1 else current
+            current_stage["i"] = current + 1 if current < len(stages) - 1 else current
         await reply({"stage": stage_id, "state": stage_state})
 
     async def log_reply(message, log_fn=logger.info, e=None):
         log_fn(message)
-        global current_stage
-        await reply_stage(stages[current_stage]['id'], message)
+        await reply_stage(stages[current_stage["i"]]['id'], message)
             
     # -----------------------------
     # send all stages to the frontend
     # -----------------------------
     await reply({"stages": stages})
 
+
+
+
+
+
+
+
     # -----------------------------
     # Parse input
     # -----------------------------
     await reply_stage_state("input_validation", "start")
+    
     build_id = data["build_id"]
     team_name = data["team_name"]
     image_name = data["image_name"]
@@ -132,11 +139,11 @@ async def build_command_handler(
     if USE_TMP_UPLOAD_FOLDER:
         tmp_folder = tempfile.mkdtemp()
         tmp_file = os.path.join(tmp_folder, file_name)
-        await log_reply(f"Using tmp folder: {tmp_folder}")
+        await log_reply(f"Using tmp folder for build")
     else:
         # create a folder with the build_id and teamname
         tmp_folder = os.path.join(DEFAULT_UPLOAD_FOLDER, f"{build_id}_{team_name}")
-        await log_reply(f"Using pre-defined folder: {tmp_folder}")
+        await log_reply(f"Using pre-defined folder for build")
         os.makedirs(tmp_folder, exist_ok=True)
         tmp_file = os.path.join(tmp_folder, file_name)
 
@@ -162,6 +169,12 @@ async def build_command_handler(
 
     await reply_stage_state("input_validation", "success")
 
+
+
+
+
+
+
     # -----------------------------
     # File Download
     # -----------------------------
@@ -181,22 +194,6 @@ async def build_command_handler(
         await log_reply("Failed to check if file exists in S3", logger.error, e)
         return
 
-    # ----------------------------- Build the image
-
-    # The structure of the temp folder should be like this:
-    # --- tmp_foolder
-    # -------- file.tar.gz
-    # -------- extraced/
-    # ------------------ teamname/
-    # -------------------------- start
-    # -------------------------- Dockerfile
-    # -------------------------- .dockerignore
-    # -------------------------- other files
-    # ------------------ --
-    # -------- docker/
-    # -------------- bin/
-    # -------------- Dockerfile
-
     # Download the file to temp folder
     try:
         await extracted_data["file"]["_client"].download_file(
@@ -207,8 +204,26 @@ async def build_command_handler(
     except Exception as e:
         await log_reply("Failed to download file from S3", logger.error, e)
         return
+    
+    await reply_stage_state("file_download", "success")
+
+
+
+
+
+
+
+
+
+
+    # ------------------------
+    # Extract
+    # ------------------------
+    
 
     # create extracted and docker folder in the temp folder
+    await reply_stage_state("file_extract", "start")
+
     extracted_folder_path = os.path.join(tmp_folder, "extracted")
     docker_folder_path = os.path.join(tmp_folder, "docker")
     try:
@@ -223,15 +238,45 @@ async def build_command_handler(
     # Check if it is a tar file and extract it to the extract folder inside temp folder
 
     try:
-        with tarfile.open(tmp_file) as tar:
-            tar.extractall(path=extracted_folder_path)
-        logger.info(f"Tar file extracted successfully to {extracted_folder_path}")
+        def extract():
+            with tarfile.open(tmp_file) as tar:
+                tar.extractall(path=extracted_folder_path)
+            logger.info(f"Tar file extracted successfully to {extracted_folder_path}")
+        await asyncio.create_task(asyncio.to_thread(extract))
 
     except Exception as e:
         await log_reply("Failed to extract tar file", logger.error, e)
         return
 
+    await reply_stage_state("file_extract", "success")
+
+    
+
+    
+    
+    
+    # ------------------------
+    # Validate
+    # ------------------------
+
+        # The structure of the temp folder should be like this:
+    # --- tmp_foolder
+    # -------- file.tar.gz
+    # -------- extraced/
+    # ------------------ teamname/
+    # -------------------------- start
+    # -------------------------- Dockerfile
+    # -------------------------- .dockerignore
+    # -------------------------- other files
+    # ------------------ --
+    # -------- docker/
+    # -------------- bin/
+    # -------------- Dockerfile
+
     # Check if the extracted folder has only one sub folder
+
+    await reply_stage_state("file_validate", "start")
+
     sub_folders = [
         name
         for name in os.listdir(extracted_folder_path)
@@ -344,8 +389,20 @@ async def build_command_handler(
     # change permission of start file executable
     os.chmod(os.path.join(bin_folder_path, "start"), 0o755)
     await log_reply(f"Start file has been made executable")
+    await reply_stage_state("file_validate", "success")
 
+
+
+
+
+
+
+
+
+
+    # ----------------------------- 
     # Build the image
+    # -----------------------------
     await reply_stage_state("team_build", "start")
     try:
         loop = asyncio.get_running_loop()
@@ -385,7 +442,15 @@ async def build_command_handler(
         return
     await reply_stage_state("team_build", "success")
 
+
+
+
+
+
+
+    # ----------------------------- 
     # Push the image to the registry
+    # -----------------------------
     await reply_stage_state("team_push", "start")
     try:
         push_q = asyncio.Queue()
@@ -397,7 +462,7 @@ async def build_command_handler(
             )
             for line in push_result:
                 asyncio.run_coroutine_threadsafe(push_q.put(line), loop)
-            asyncio.run_coroutine_threadsafe(build_q.put(None), loop)
+            asyncio.run_coroutine_threadsafe(push_q.put(None), loop)
 
         asyncio.create_task(asyncio.to_thread(push))
 
@@ -421,6 +486,19 @@ async def build_command_handler(
             shutil.rmtree(tmp_folder)
         return
     await reply_stage_state("team_push", "success")
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    # -----------------------------
+    # Cleanup
+    # -----------------------------
 
     # remove the extracted folder and docker folder after the image has been pushed
     await reply_stage_state("cleanup", "start")
@@ -432,6 +510,9 @@ async def build_command_handler(
             await log_reply("Failed to remove the extracted folder", logger.error, e)
             return
     await reply_stage_state("cleanup", "success")
+
+
+
 
     # replay the success message with the image name and tag
     await log_reply(
