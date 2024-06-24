@@ -1,4 +1,5 @@
 import logging
+import multiprocessing
 import os
 import shutil
 import tarfile
@@ -337,8 +338,8 @@ async def build_command_handler(
     data: dict, docker: Docker, storage: MinioClient, reply, state_manager: StateManager,
     **kwargs
 ):
-    async def run_job():
-        await state_manager.update_state(data["build_id"], "progress")
+    async def async_run_job(queue: asyncio.Queue):
+        queue.put(("update_state", data["build_id"], "progress"))
         stages = [
             {"id": "input_validation", "name": "Input Validation"},
             {"id": "file_download", "name": "File Download"},
@@ -379,9 +380,28 @@ async def build_command_handler(
             return
 
         await log_reply(reply, stages, current_stage, f"Image {image_name}:{image_tag} has been built and pushed successfully", logger.info)
-        await state_manager.update_state(data["build_id"], "finished")
+        queue.put(("update_state", data["build_id"], "finished"))
     
-    task = asyncio.create_task(run_job())
+    def run_job(queue: asyncio.Queue):
+        asyncio.run(async_run_job(queue))
+
+    queue = multiprocessing.Queue()
+    task = multiprocessing.Process(target=run_job, args=(queue,))
     state_manager.add_run_job(data["build_id"], task, data)
-    await task
+    task.start()
+
+    async def state_updater(loop):
+        while True:
+            try:
+                msg = queue.get_nowait()
+                if msg[0] == "update_state":
+                    asyncio.run_coroutine_threadsafe(state_manager.update_state(msg[1], msg[2]), loop)
+            except Exception as e:
+                pass
+
+            if not task.is_alive():
+                break
+    t = asyncio.create_task(asyncio.to_thread(state_updater, asyncio.get_running_loop()))
+    await t
+    task.join()
     return
