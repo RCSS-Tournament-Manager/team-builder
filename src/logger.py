@@ -25,6 +25,9 @@ def init_logger(name='root'):
     _shut_upped = colorlog.ERROR if DEBUG_ENV else colorlog.CRITICAL
     _logger = getLogger('watchdog')
     
+    # mute aiostomp
+    logging.getLogger('aiostomp').setLevel(logging.ERROR)
+    
     return logger
 
 

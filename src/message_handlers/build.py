@@ -14,7 +14,6 @@ from src.env import (
     REMOVE_AFTER_BUILD,
     USE_TMP_UPLOAD_FOLDER,
 )
-from src.message_handlers.kill_build import (check_kill_command,set_kill_command)
 import json
 import asyncio
 
@@ -41,13 +40,72 @@ async def download_team_dockerfile_from_minio(
     ]
 )
 async def build_command_handler(
-    data: dict, 
-    docker: Docker, 
-    storage: MinioClient, 
-    reply, 
-    **kwargs
+    data: dict, docker: Docker, storage: MinioClient, reply, **kwargs
 ):
-    # ----------------------------- Parse input
+    
+    
+
+    stages = [
+        {
+            "id": "input_validation",
+            "name": "Input Validation",
+        },
+        {
+            "id": "file_download",
+            "name": "File Download",
+        },
+        {
+            "id": "file_extract",
+            "name": "File Extract",
+        },
+        {
+            "id": "file_validate",
+            "name": "File Validate",
+        },
+        {
+            "id": "team_build",
+            "name": "Team Build",
+        },
+        {
+            "id": "team_push",
+            "name": "Team Push",
+        },
+        {
+            "id": "cleanup",
+            "name": "Cleanup",
+        },
+    ]
+
+    global current_stage
+    current_stage = 0
+    async def reply_stage(stage_id, message):
+        await reply({"stage": stage_id, "data": message})
+
+    async def reply_stage_state(stage_id, stage_state):
+        if stage_state == "success":
+            # find index of the current stage
+            current = stages.index(
+                next(filter(lambda x: x["id"] == stage_id, stages))
+            )
+            print('==============',current)
+            global current_stage
+            current_stage = current + 1 if current < len(stages) - 1 else current
+        await reply({"stage": stage_id, "state": stage_state})
+
+    async def log_reply(message, log_fn=logger.info, e=None):
+        log_fn(message)
+        global current_stage
+        await reply_stage(stages[current_stage]['id'], message)
+            
+    # -----------------------------
+    # send all stages to the frontend
+    # -----------------------------
+    await reply({"stages": stages})
+
+    # -----------------------------
+    # Parse input
+    # -----------------------------
+    await reply_stage_state("input_validation", "start")
     build_id = data["build_id"]
     team_name = data["team_name"]
     image_name = data["image_name"]
@@ -60,14 +118,13 @@ async def build_command_handler(
     tmp_folder = None
     tmp_file = None
 
-    async def log_reply(message, log_fn=logger.info, e=None):
-        log_fn(message)
-        await reply(message)
 
     if "registry" not in data:
         data["registry"] = {"_type": "docker", "_config": "default"}
 
-    extracted_data, errors = initialize_clients(data, docker=docker, storage=storage, **kwargs)
+    extracted_data, errors = initialize_clients(
+        data, docker=docker, storage=storage, **kwargs
+    )
     for error in errors:
         logger.error(error)
         await reply(error)
@@ -75,7 +132,7 @@ async def build_command_handler(
     if USE_TMP_UPLOAD_FOLDER:
         tmp_folder = tempfile.mkdtemp()
         tmp_file = os.path.join(tmp_folder, file_name)
-        log_reply(f"Using tmp folder: {tmp_folder}")
+        await log_reply(f"Using tmp folder: {tmp_folder}")
     else:
         # create a folder with the build_id and teamname
         tmp_folder = os.path.join(DEFAULT_UPLOAD_FOLDER, f"{build_id}_{team_name}")
@@ -103,7 +160,13 @@ async def build_command_handler(
             if file_path != "":
                 team_dockerfile_path = file_path
 
-    # ----------------------------- Validation
+    await reply_stage_state("input_validation", "success")
+
+    # -----------------------------
+    # File Download
+    # -----------------------------
+
+    await reply_stage_state("file_download", "start")
 
     # Check if the file exists in storage
     try:
@@ -152,7 +215,9 @@ async def build_command_handler(
         os.makedirs(extracted_folder_path)
         os.makedirs(docker_folder_path)
     except Exception as e:
-        await log_reply("Failed to create extracted and docker folders", logger.error, e)
+        await log_reply(
+            "Failed to create extracted and docker folders", logger.error, e
+        )
         return
 
     # Check if it is a tar file and extract it to the extract folder inside temp folder
@@ -189,7 +254,7 @@ async def build_command_handler(
             logger.error,
         )
         return
-    
+
     # Check if the required files exist in the extracted folder
     required_files = ["start"]  # Add more file names if needed
     not_found_files = []
@@ -205,10 +270,10 @@ async def build_command_handler(
         await log_reply("All required files found")
 
     # Check if any Dockerfile type exists in the extracted folder and remove it
-    dockerfile_types = [ # what dockerfiles to remove 
+    dockerfile_types = [  # what dockerfiles to remove
         "Dockerfile",
         ".dockerignore",
-    ] 
+    ]
     for dockerfile_type in dockerfile_types:
         dockerfile_path = os.path.join(team_folder_path, dockerfile_type)
         if os.path.isfile(dockerfile_path):
@@ -243,14 +308,14 @@ async def build_command_handler(
     # replay the success message
     await log_reply(f"Extracted folder has been moved to the bin folder")
 
-    # Copy the dockerfile from s3 to the extracted folder or falback
+    # Copy the dockerfile from s3 to the extracted folder or fallback
     try:
         new_dockerfile_path = os.path.join(
             docker_folder_path,
             # team_name,
             "Dockerfile",
         )
-        shutil.copy(team_dockerfile_path, new_dockerfile_path)  
+        shutil.copy(team_dockerfile_path, new_dockerfile_path)
 
         await log_reply(
             f"S3 Team Dockerfile has been copied in to the extracted folder"
@@ -260,7 +325,7 @@ async def build_command_handler(
             f"Failed to copy Team Dockerfile in the extracted folder", logger.error, e
         )
 
-    # falback to default dockerfile and copy it to the extracted folder
+    # fallback to default dockerfile and copy it to the extracted folder
     if not os.path.exists(new_dockerfile_path):
         try:
             shutil.copy(DEFAULT_TEAM_BUILD_DOCKERFILE, new_dockerfile_path)
@@ -275,73 +340,90 @@ async def build_command_handler(
                 e,
             )
             return
-        
-    # change permission of start file executeable 
+
+    # change permission of start file executable
     os.chmod(os.path.join(bin_folder_path, "start"), 0o755)
     await log_reply(f"Start file has been made executable")
-    
-    
-    # -----------------------------
-    # Check if there was a kill build command
-    wait_time = 1
-    logger.info(f"Waiting {wait_time} second for any kill command")
-    await asyncio.sleep(wait_time)  
-    if await check_kill_command(team_name,build_id):
-        await set_kill_command()
-        logger.info(f"An kill build command was set for {team_name} --- Building has been stopped")
-        await log_reply(f"An kill build command was set for {team_name} --- Building has been stopped")
-        return
+
     # Build the image
+    await reply_stage_state("team_build", "start")
     try:
-        build_result = extracted_data["registry"]["_client"].build_with_path(
-            path=docker_folder_path,
-            image_name=image_name,
-            image_tag=image_tag,
-        )
-        # Assuming env.docker_i.build_with_path returns a stream of build output
-        for line in build_result:
+        loop = asyncio.get_running_loop()
+        build_q = asyncio.Queue()
+
+        def build():
+            build_result = extracted_data["registry"]["_client"].build_with_path(
+                path=docker_folder_path,
+                image_name=image_name,
+                image_tag=image_tag,
+            )
+            for line in build_result:
+                asyncio.run_coroutine_threadsafe(build_q.put(line), loop)
+            asyncio.run_coroutine_threadsafe(build_q.put(None), loop)
+
+        asyncio.create_task(asyncio.to_thread(build))
+
+        await log_reply("Build started")
+        while True:
+            line = await build_q.get()
+            if line is None:
+                break
             msg = None
             try:
-                logger.debug("line : " + line)
                 msg = json.loads(line)
             except:
                 msg = line
-                logger.debug("Failed to parse the msg")
 
             logger.debug(msg)
-            await reply(msg)
+            await log_reply(msg, logger.debug)
+
     except Exception as e:
         logger.error("Failed to build image", e)
         if REMOVE_AFTER_BUILD:
             shutil.rmtree(tmp_folder)
         await reply("Failed to build image")
         return
+    await reply_stage_state("team_build", "success")
 
     # Push the image to the registry
+    await reply_stage_state("team_push", "start")
     try:
-        push_result = extracted_data["registry"]["_client"].push_to_registry(
-            image_name=image_name,
-            image_tag=image_tag,
-        )
-        # Assuming env.docker_i.push_to_registry returns a stream of push output
-        for line in push_result:
+        push_q = asyncio.Queue()
+
+        def push():
+            push_result = extracted_data["registry"]["_client"].push_to_registry(
+                image_name=image_name,
+                image_tag=image_tag,
+            )
+            for line in push_result:
+                asyncio.run_coroutine_threadsafe(push_q.put(line), loop)
+            asyncio.run_coroutine_threadsafe(build_q.put(None), loop)
+
+        asyncio.create_task(asyncio.to_thread(push))
+
+        await log_reply("Push started")
+        while True:
+            line = await push_q.get()
+            if line is None:
+                break
             msg = None
             try:
-                logger.debug("line : " + line)
                 msg = json.loads(line)
-            except Exception as e:
+            except:
                 msg = line
-                logger.debug("Failed to parse the msg")
-                logger.debug(e)
 
             logger.debug(msg)
-            await reply(msg)
+            await log_reply(msg, logger.debug)
+
     except Exception as e:
         await log_reply("Failed to push image to registry", logger.error, e)
         if REMOVE_AFTER_BUILD:
             shutil.rmtree(tmp_folder)
         return
+    await reply_stage_state("team_push", "success")
+
     # remove the extracted folder and docker folder after the image has been pushed
+    await reply_stage_state("cleanup", "start")
     if REMOVE_AFTER_BUILD:
         try:
             shutil.rmtree(extracted_folder_path)
@@ -349,6 +431,7 @@ async def build_command_handler(
         except Exception as e:
             await log_reply("Failed to remove the extracted folder", logger.error, e)
             return
+    await reply_stage_state("cleanup", "success")
 
     # replay the success message with the image name and tag
     await log_reply(
