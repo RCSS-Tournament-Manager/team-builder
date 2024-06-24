@@ -2,10 +2,8 @@
 message format :
 {
     "command": "kill_build",
-    "body": {
+    "data": {
         "build_id": "1234",
-        "team_name": "teamA",
-        
     }
 }
 ```
